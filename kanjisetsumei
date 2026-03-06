@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日本語 解析 — Japanese Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Noto+Sans+JP:wght@300;400;700&family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #1a1008;
+  --paper: #f5ede0;
+  --aged: #e8d9c0;
+  --red: #c0392b;
+  --gold: #b8860b;
+  --brush: #2c1810;
+  --muted: #7a6a5a;
+  --border: #c9ad8a;
+  --hi: #fff8e0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--paper);
+  background-image:
+    radial-gradient(ellipse at 15% 10%, rgba(184,134,11,.07) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(192,57,43,.05) 0%, transparent 55%);
+  font-family: 'Be Vietnam Pro', sans-serif;
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+/* ── LAYOUT ── */
+.page { max-width: 780px; margin: 0 auto; padding: 20px 16px 60px; }
+
+/* ── HEADER ── */
+header {
+  text-align: center;
+  padding: 40px 0 28px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 32px;
+  position: relative;
+}
+header::after {
+  content: '⛩';
+  position: absolute; bottom: -16px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--paper); padding: 0 12px; font-size: 20px;
+}
+.logo { font-family: 'Noto Serif JP', serif; font-size: clamp(30px,6vw,48px); font-weight: 700; color: var(--brush); letter-spacing: .12em; line-height: 1; }
+.logo-sub { font-size: 11px; color: var(--muted); margin-top: 8px; letter-spacing: .18em; text-transform: uppercase; }
+
+/* ── API KEY BANNER ── */
+#keyBanner {
+  background: linear-gradient(135deg,#1a1008,#3d2010);
+  border: 1.5px solid var(--gold);
+  border-radius: 6px;
+  padding: 20px 22px;
+  margin-bottom: 24px;
+  color: var(--paper);
+}
+#keyBanner h3 { font-size: 13px; letter-spacing: .12em; color: #ffd080; margin-bottom: 10px; }
+#keyBanner p { font-size: 12px; opacity: .75; line-height: 1.7; margin-bottom: 12px; }
+#keyBanner a { color: #ffd080; }
+.key-row { display: flex; gap: 8px; }
+#apiKeyInput {
+  flex: 1; padding: 10px 14px; background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.2); border-radius: 4px;
+  color: var(--paper); font-size: 13px; font-family: monospace; outline: none;
+  transition: border .2s;
+}
+#apiKeyInput:focus { border-color: #ffd080; }
+#apiKeyInput::placeholder { opacity: .4; }
+.btn-save {
+  background: var(--gold); color: var(--brush); border: none;
+  padding: 10px 18px; font-weight: 700; font-size: 13px;
+  cursor: pointer; border-radius: 4px; white-space: nowrap;
+  transition: opacity .15s;
+}
+.btn-save:hover { opacity: .85; }
+.key-saved {
+  display: none; align-items: center; gap: 8px;
+  font-size: 12px; color: #a0f0a0; margin-top: 8px;
+}
+.key-saved.show { display: flex; }
+
+/* ── INPUT CARD ── */
+.input-card {
+  background: white;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 4px 4px 0 var(--aged);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.input-label {
+  background: var(--brush); color: var(--paper);
+  padding: 9px 16px; font-size: 11px; letter-spacing: .18em;
+  display: flex; align-items: center; gap: 8px;
+}
+.input-label .jp { font-family: 'Noto Serif JP', serif; font-size: 17px; }
+#sentence {
+  width: 100%; padding: 18px 20px; border: none; outline: none;
+  font-family: 'Noto Serif JP', serif; font-size: clamp(19px,3.5vw,26px);
+  background: transparent; color: var(--ink); resize: none; min-height: 90px; line-height: 1.7;
+}
+#sentence::placeholder { color: #c9b89a; }
+.btn-row {
+  padding: 10px 14px; border-top: 1px solid #f0e8d8;
+  background: #faf5ee; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.btn-analyze {
+  background: var(--red); color: white; border: none;
+  padding: 10px 26px; font-family: 'Be Vietnam Pro', sans-serif;
+  font-weight: 700; font-size: 14px; cursor: pointer; border-radius: 3px;
+  box-shadow: 3px 3px 0 #8e1a12; transition: all .15s;
+}
+.btn-analyze:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 #8e1a12; }
+.btn-analyze:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #8e1a12; }
+.btn-analyze:disabled { background: #bbb; box-shadow: 2px 2px 0 #888; cursor: not-allowed; transform: none; }
+.ex-label { font-size: 11px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+.ex-btn {
+  background: none; border: 1px solid var(--border);
+  padding: 4px 10px; font-size: 12px; font-family: 'Noto Sans JP', sans-serif;
+  color: var(--muted); cursor: pointer; border-radius: 3px; transition: all .15s;
+}
+.ex-btn:hover { background: var(--aged); color: var(--ink); }
+
+/* ── ERROR ── */
+.error {
+  display: none; background: #fff0ee; border: 1.5px solid #e8a0a0;
+  border-radius: 4px; padding: 12px 16px; color: #8a2020;
+  font-size: 14px; margin-bottom: 18px;
+}
+
+/* ── LOADING ── */
+#loading {
+  display: none; text-align: center; padding: 60px 0;
+}
+.scroll-spin { font-size: 52px; display: inline-block; animation: spin 2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { color: var(--muted); font-size: 13px; margin-top: 14px; letter-spacing: .1em; }
+
+/* ── SECTIONS ── */
+.section {
+  background: white; border: 1.5px solid var(--border); border-radius: 6px;
+  box-shadow: 3px 3px 0 var(--aged); margin-bottom: 20px;
+  overflow: hidden; animation: fadeUp .4s ease both;
+}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; } }
+.sec-hd {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 18px;
+  background: linear-gradient(135deg, var(--brush), #3d2010);
+  color: var(--paper);
+}
+.sec-icon { font-size: 19px; }
+.sec-title { font-weight: 700; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; }
+.sec-jp { font-family: 'Noto Serif JP', serif; font-size: 15px; margin-left: auto; opacity: .6; }
+.sec-body { padding: 20px 22px; }
+
+/* ── OVERVIEW ── */
+.ov-sentence {
+  font-family: 'Noto Serif JP', serif;
+  font-size: clamp(22px,4.5vw,34px); text-align: center;
+  padding: 22px 20px; background: var(--brush); color: var(--paper);
+  letter-spacing: .1em; line-height: 1.8;
+}
+.ov-reading {
+  text-align: center; font-size: 12px; color: var(--muted);
+  padding: 9px; background: #faf5ee;
+  border-bottom: 1px solid var(--aged); letter-spacing: .12em;
+}
+.ov-meaning {
+  text-align: center; font-size: 15px; padding: 14px 20px;
+  color: #3a2808; font-style: italic;
+  background: var(--hi); border-top: 1px solid #f0d060;
+}
+
+/* ── BREAKDOWN TABLE ── */
+.gram-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gram-table th {
+  background: var(--aged); padding: 8px 12px; text-align: left;
+  font-size: 10px; letter-spacing: .12em; color: var(--muted);
+  font-weight: 600; border-bottom: 1px solid var(--border);
+}
+.gram-table td { padding: 10px 12px; border-bottom: 1px solid #f0e8d8; vertical-align: top; }
+.gram-table tr:last-child td { border-bottom: none; }
+.gram-table tr:hover td { background: #faf5ee; }
+.part-jp { font-family: 'Noto Serif JP', serif; font-size: 19px; font-weight: 700; color: var(--red); }
+.part-read { font-size: 10px; color: #bbb; }
+.tag-role { background: var(--brush); color: var(--paper); font-size: 10px; padding: 2px 8px; border-radius: 2px; }
+.tag-xform { background: var(--hi); border: 1px solid #f0c030; color: #7a5c00; font-size: 10px; padding: 2px 8px; border-radius: 2px; }
+
+/* ── KANJI GRID ── */
+.kanji-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(290px,1fr)); gap: 16px; }
+.kcard { border: 1.5px solid var(--border); border-radius: 6px; overflow: hidden; background: #fffdf8; }
+.kcard-hd {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  background: linear-gradient(135deg, #2c1810, #4a2818); color: var(--paper);
+}
+.kchar { font-family: 'Noto Serif JP', serif; font-size: 54px; line-height: 1; text-shadow: 2px 2px 10px rgba(0,0,0,.4); }
+.kreadings { font-size: 12px; opacity: .85; line-height: 1.9; }
+.kreadings strong { font-size: 15px; opacity: 1; }
+.kbody { padding: 14px 16px; }
+.k-origin {
+  background: linear-gradient(135deg,#fff8ee,#fff3e0);
+  border-left: 3px solid var(--gold); padding: 10px 14px;
+  border-radius: 0 4px 4px 0; margin-bottom: 10px;
+  font-size: 13px; color: #4a3020; font-style: italic; line-height: 1.7;
+}
+.k-origin-title { font-size: 10px; color: var(--gold); font-style: normal; font-weight: 700; letter-spacing: .12em; display: block; margin-bottom: 4px; }
+.k-ex { font-size: 12px; color: #5a4a2a; }
+.k-ex strong { font-family: 'Noto Serif JP', serif; color: var(--red); }
+
+/* ── VOCAB ── */
+.vitem { border-left: 3px solid var(--red); padding: 14px 16px; margin-bottom: 14px; background: #fffdf8; border-radius: 0 5px 5px 0; }
+.vitem:last-child { margin-bottom: 0; }
+.vword { font-family: 'Noto Serif JP', serif; font-size: 22px; font-weight: 700; }
+.vread { font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: .1em; }
+.vtags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.tag { font-size: 10px; padding: 2px 8px; border-radius: 2px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.t-n5 { background: #f8e8e8; color: #8a2d2d; border: 1px solid #e8a8a8; }
+.t-n4 { background: #e8f4e8; color: #2d6a2d; border: 1px solid #a8d8a8; }
+.t-n3 { background: #e8eef8; color: #2d4a8a; border: 1px solid #a8c0e8; }
+.t-type { background: #f0ece4; color: #6a5a3a; border: 1px solid #d0c0a0; }
+.vdef { font-size: 14px; line-height: 1.6; margin-bottom: 8px; }
+.vnuance { font-size: 12px; color: #7a5a2a; font-style: italic; margin-bottom: 10px; }
+.vex { background: var(--hi); border: 1px solid #f0d060; padding: 10px 14px; border-radius: 4px; line-height: 1.9; }
+.vex-jp { font-family: 'Noto Serif JP', serif; font-size: 15px; color: var(--brush); display: block; }
+.vex-rd { font-size: 11px; color: var(--muted); display: block; }
+.vex-vi { font-style: italic; color: #5a4a2a; display: block; font-size: 13px; }
+
+/* ── GRAMMAR PATTERNS ── */
+.gpat {
+  background: linear-gradient(135deg,#1a1008,#2c1810);
+  color: var(--paper); border-radius: 5px; padding: 16px 20px; margin-bottom: 12px;
+}
+.gpat:last-child { margin-bottom: 0; }
+.gpat-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.gpat-name { font-family: 'Noto Serif JP', serif; font-size: 19px; color: #ffd080; }
+.gpat-lvl { font-size: 10px; background: #ffd080; color: var(--brush); padding: 2px 8px; border-radius: 2px; font-weight: 700; }
+.gpat-meaning { font-size: 13px; opacity: .9; line-height: 1.6; margin-bottom: 8px; }
+.gpat-form { font-size: 12px; background: rgba(255,255,255,.1); padding: 8px 12px; border-radius: 4px; font-family: 'Noto Serif JP', serif; margin-bottom: 8px; }
+.gpat-ex { font-size: 12px; opacity: .8; line-height: 1.8; }
+.gpat-jp { font-family: 'Noto Serif JP', serif; font-size: 14px; color: #ffd080; display: block; }
+
+/* ── NUANCE ── */
+.nuance-box {
+  background: linear-gradient(135deg,#fff8ee,#fff3e0);
+  border: 1.5px solid var(--gold); border-radius: 5px;
+  padding: 20px; line-height: 1.9; font-size: 14px; color: #3a2808;
+}
+.nuance-box p { margin-bottom: 12px; }
+.nuance-box p:last-child { margin-bottom: 0; }
+
+/* ── FOOTER ── */
+footer {
+  text-align: center; font-size: 11px; color: var(--muted);
+  padding: 28px 0 0; border-top: 1px solid var(--border);
+  letter-spacing: .1em; margin-top: 20px;
+}
+
+/* ── RESPONSIVE ── */
+@media(max-width:560px){
+  .kanji-grid { grid-template-columns: 1fr; }
+  .ex-label, .ex-btn { display: none; }
+  .gram-table { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">日本語 解析</div>
+  <div class="logo-sub">Phân tích tiếng Nhật chuyên sâu · N5 – N4</div>
+</header>
+
+<!-- API KEY -->
+<div id="keyBanner">
+  <h3>🔑 NHẬP API KEY ANTHROPIC CỦA BẠN</h3>
+  <p>
+    App này gọi thẳng đến API Anthropic từ trình duyệt — bạn cần API key riêng.<br>
+    Lấy key miễn phí tại <a href="https://console.anthropic.com/keys" target="_blank">console.anthropic.com/keys</a>.
+    Key được lưu trong <em>localStorage</em> trên máy bạn, không gửi đi đâu khác.
+  </p>
+  <div class="key-row">
+    <input id="apiKeyInput" type="password" placeholder="sk-ant-api03-..." autocomplete="off">
+    <button class="btn-save" onclick="saveKey()">Lưu key</button>
+  </div>
+  <div class="key-saved" id="keySaved">✅ Key đã lưu — bạn có thể bắt đầu phân tích!
+    <span style="margin-left:auto;font-size:11px;opacity:.6;cursor:pointer" onclick="clearKey()">Xoá key</span>
+  </div>
+</div>
+
+<!-- INPUT -->
+<div class="input-card">
+  <div class="input-label"><span class="jp">文</span> Nhập câu tiếng Nhật</div>
+  <textarea id="sentence" rows="3" placeholder="例：毎日日本語を勉強しています。"></textarea>
+  <div class="btn-row">
+    <button class="btn-analyze" id="analyzeBtn" onclick="analyze()">⚡ Phân tích</button>
+    <span class="ex-label">Thử ngay:</span>
+    <button class="ex-btn" onclick="setEx('毎日日本語を勉強しています。')">毎日勉強…</button>
+    <button class="ex-btn" onclick="setEx('昨日、友達と映画を見に行きました。')">映画を見に…</button>
+    <button class="ex-btn" onclick="setEx('この本は難しくて、全然わかりません。')">難しくて…</button>
+    <button class="ex-btn" onclick="setEx('もし時間があれば、一緒に行きませんか。')">もし〜ば…</button>
+  </div>
+</div>
+
+<div class="error" id="errorBox"></div>
+
+<!-- LOADING -->
+<div id="loading">
+  <span class="scroll-spin">📜</span>
+  <p>Đang triệu hồi học giả... vui lòng đợi 1–2 phút ☕</p>
+</div>
+
+<!-- RESULT -->
+<div id="result"></div>
+
+<footer>日本語解析 · Powered by Claude API · Made for Japanese learners · Ctrl+Enter to analyze</footer>
+
+</div><!-- /page -->
+
+<script>
+/* ── KEY MANAGEMENT ── */
+const KEY_LS = 'anthropic_api_key';
+
+function saveKey(){
+  const k = document.getElementById('apiKeyInput').value.trim();
+  if(!k){ alert('Hãy nhập key trước!'); return; }
+  localStorage.setItem(KEY_LS, k);
+  document.getElementById('keySaved').classList.add('show');
+}
+function clearKey(){
+  localStorage.removeItem(KEY_LS);
+  document.getElementById('apiKeyInput').value='';
+  document.getElementById('keySaved').classList.remove('show');
+}
+function getKey(){ return localStorage.getItem(KEY_LS)||''; }
+
+window.addEventListener('DOMContentLoaded',()=>{
+  const k=getKey();
+  if(k){
+    document.getElementById('apiKeyInput').value=k;
+    document.getElementById('keySaved').classList.add('show');
+  }
+  document.getElementById('sentence').addEventListener('keydown',e=>{
+    if(e.key==='Enter'&&e.ctrlKey) analyze();
+  });
+});
+
+/* ── EXAMPLES ── */
+function setEx(t){ document.getElementById('sentence').value=t; }
+
+/* ── ANALYZE ── */
+const SYSTEM = `Bạn là giáo sư ngôn ngữ Nhật Bản chuyên phân tích câu cho người mới học (N5-N4).
+Khi nhận một câu tiếng Nhật, hãy phân tích TOÀN DIỆN và trả về JSON hợp lệ DUY NHẤT.
+KHÔNG có markdown, KHÔNG có backtick, KHÔNG có text ngoài JSON.
+
+Schema:
+{
+  "sentence": "câu gốc",
+  "reading": "furigana hoặc romaji",
+  "meaning_vi": "nghĩa tiếng Việt",
+  "breakdown": [
+    { "part":"từ/phần", "reading":"đọc", "role":"vai trò ngữ pháp", "meaning":"nghĩa", "transform":"biến thể nếu có (て形/た形/ます形/...)", "note":"ghi chú" }
+  ],
+  "kanji": [
+    { "char":"kanji", "on":"âm on", "kun":"âm kun", "meaning":"nghĩa",
+      "origin_story":"câu chuyện nguồn gốc CỰC KỲ ấn tượng, gắt, bạo lực/sinh động theo phong cách Giáp Cốt Văn / Kim Văn hoặc hư cấu hợp lý, 2-3 câu ngắn, dễ nhớ",
+      "example_word":"từ ví dụ", "example_read":"đọc", "example_meaning":"nghĩa" }
+  ],
+  "vocabulary": [
+    { "word":"từ", "reading":"đọc", "type":"loại từ", "jlpt":"N5/N4/N3",
+      "meaning":"nghĩa đầy đủ", "nuance":"sắc thái hoặc cách dùng đặc biệt",
+      "example_jp":"câu ví dụ N4 có cấu trúc phong phú",
+      "example_read":"đọc câu ví dụ", "example_vi":"dịch" }
+  ],
+  "grammar_patterns": [
+    { "pattern":"mẫu ngữ pháp", "jlpt":"cấp", "meaning":"ý nghĩa / cách dùng",
+      "form":"cấu trúc / cách chia",
+      "example_jp":"câu ví dụ", "example_read":"đọc", "example_vi":"dịch" }
+  ],
+  "nuance": "phân tích hàm ý sâu: bối cảnh xã hội, sắc thái lịch sự/thân mật, điều ẩn chứa phía sau (2-4 đoạn tiếng Việt, mỗi đoạn 1 dòng)"
+}
+
+Quan trọng:
+- origin_story PHẢI gắt, ấn tượng, gắn hình ảnh chiến tranh/săn bắn/lửa/thiên nhiên hung tàn nếu phù hợp.
+- Chỉ phân tích kanji THỰC SỰ có trong câu.
+- Liệt kê TẤT CẢ mẫu ngữ pháp quan trọng.
+- Trả về JSON thuần túy.`;
+
+async function analyze(){
+  const sentence = document.getElementById('sentence').value.trim();
+  const key = getKey();
+  const errBox = document.getElementById('errorBox');
+  errBox.style.display='none';
+
+  if(!key){ errBox.textContent='⚠️ Bạn chưa nhập API key! Điền vào ô phía trên rồi bấm Lưu key.'; errBox.style.display='block'; return; }
+  if(!sentence){ errBox.textContent='⚠️ Hãy nhập một câu tiếng Nhật!'; errBox.style.display='block'; return; }
+
+  const btn=document.getElementById('analyzeBtn');
+  btn.disabled=true; btn.textContent='⏳ Đang phân tích...';
+  document.getElementById('loading').style.display='block';
+  document.getElementById('result').style.display='none';
+  document.getElementById('result').innerHTML='';
+
+  try{
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key': key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:4000,
+        system: SYSTEM,
+        messages:[{role:'user', content:`Phân tích câu này: ${sentence}`}]
+      })
+    });
+    const json = await res.json();
+    if(!res.ok) throw new Error(json.error?.message||'API error '+res.status);
+    const text = json.content.map(i=>i.text||'').join('');
+    const data = JSON.parse(text.replace(/```json|```/g,'').trim());
+    render(data);
+  } catch(e){
+    errBox.textContent = '⚠️ Lỗi: ' + e.message;
+    errBox.style.display='block';
+  } finally {
+    btn.disabled=false; btn.textContent='⚡ Phân tích';
+    document.getElementById('loading').style.display='none';
+  }
+}
+
+/* ── RENDER ── */
+function tag(cls,txt){ return `<span class="tag ${cls}">${txt}</span>`; }
+function lvlTag(jlpt){ const m={'N5':'t-n5','N4':'t-n4','N3':'t-n3'}; return tag(m[jlpt]||'t-n4', jlpt||'?'); }
+
+function render(d){
+  const R = document.getElementById('result');
+  let h = '';
+
+  /* overview */
+  h += `<div class="section" style="animation-delay:.0s">
+    <div class="ov-sentence">${d.sentence}</div>
+    <div class="ov-reading">📖 ${d.reading||''}</div>
+    <div class="ov-meaning">🇻🇳 ${d.meaning_vi||''}</div>
+  </div>`;
+
+  /* breakdown */
+  if(d.breakdown?.length){
+    h += sec('🔬','Phân tích cú pháp','文法解析','.05s',`
+      <div style="overflow-x:auto">
+      <table class="gram-table">
+        <thead><tr>
+          <th>Thành phần</th><th>Vai trò</th><th>Nghĩa</th><th>Biến thể</th><th>Ghi chú</th>
+        </tr></thead><tbody>
+        ${d.breakdown.map(p=>`<tr>
+          <td><div class="part-jp">${p.part}</div><div class="part-read">${p.reading||''}</div></td>
+          <td><span class="tag-role">${p.role||''}</span></td>
+          <td style="font-size:13px">${p.meaning||''}</td>
+          <td>${p.transform?`<span class="tag-xform">${p.transform}</span>`:'<span style="color:#ddd">—</span>'}</td>
+          <td style="font-size:11px;color:var(--muted)">${p.note||''}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>`);
+  }
+
+  /* kanji */
+  if(d.kanji?.length){
+    h += sec('🗡️','Hán tự — Nguồn gốc','漢字の起源','.10s',`
+      <div class="kanji-grid">
+      ${d.kanji.map(k=>`<div class="kcard">
+        <div class="kcard-hd">
+          <div class="kchar">${k.char}</div>
+          <div class="kreadings"><strong>${k.meaning}</strong><br>On: ${k.on||'—'}<br>Kun: ${k.kun||'—'}</div>
+        </div>
+        <div class="kbody">
+          <div class="k-origin">
+            <span class="k-origin-title">📜 GIÁP CỐT VĂN</span>
+            ${k.origin_story}
+          </div>
+          <div class="k-ex">Ví dụ: <strong>${k.example_word}</strong> (${k.example_read||''}) — ${k.example_meaning||''}</div>
+        </div>
+      </div>`).join('')}
+      </div>`);
+  }
+
+  /* vocabulary */
+  if(d.vocabulary?.length){
+    h += sec('📚','Từ vựng chi tiết','語彙','.15s',
+      d.vocabulary.map(v=>`<div class="vitem">
+        <div class="vword">${v.word}</div>
+        <div class="vread">${v.reading||''}</div>
+        <div class="vtags">${lvlTag(v.jlpt)}${tag('t-type',v.type||'')}</div>
+        <div class="vdef">${v.meaning||''}</div>
+        ${v.nuance?`<div class="vnuance">💡 ${v.nuance}</div>`:''}
+        <div class="vex">
+          <span class="vex-jp">${v.example_jp||''}</span>
+          <span class="vex-rd">${v.example_read||''}</span>
+          <span class="vex-vi">→ ${v.example_vi||''}</span>
+        </div>
+      </div>`).join('')
+    );
+  }
+
+  /* grammar */
+  if(d.grammar_patterns?.length){
+    h += sec('⚙️','Mẫu ngữ pháp','文法パターン','.20s',
+      d.grammar_patterns.map(g=>`<div class="gpat">
+        <div class="gpat-top">
+          <span class="gpat-name">${g.pattern}</span>
+          <span class="gpat-lvl">${g.jlpt||''}</span>
+        </div>
+        <div class="gpat-meaning">${g.meaning||''}</div>
+        <div class="gpat-form">${g.form||''}</div>
+        <div class="gpat-ex">
+          <span class="gpat-jp">${g.example_jp||''}</span>
+          <span style="opacity:.65;font-size:11px">${g.example_read||''}</span><br>
+          → ${g.example_vi||''}
+        </div>
+      </div>`).join('')
+    );
+  }
+
+  /* nuance */
+  if(d.nuance){
+    const paras = d.nuance.split('\n').filter(p=>p.trim());
+    h += sec('🎭','Hàm ý & Ngữ cảnh','含意・文脈','.25s',`
+      <div class="nuance-box">
+        ${paras.map(p=>`<p>${p}</p>`).join('')}
+      </div>`);
+  }
+
+  R.innerHTML = h;
+  R.style.display='block';
+  R.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function sec(icon, title, jp, delay, body){
+  return `<div class="section" style="animation-delay:${delay}">
+    <div class="sec-hd">
+      <span class="sec-icon">${icon}</span>
+      <span class="sec-title">${title}</span>
+      <span class="sec-jp">${jp}</span>
+    </div>
+    <div class="sec-body">${body}</div>
+  </div>`;
+}
+</script>
+</body>
+</html>
